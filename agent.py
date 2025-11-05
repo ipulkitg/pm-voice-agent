@@ -29,10 +29,15 @@ print("✅ RAG query engine ready")
 @llm.function_tool(
     name="search_knowledge_base",
     description=(
-        "Search Lenny's Newsletter and Podcast knowledge base for product advice, frameworks, "
-        "case studies, and insights. Use this when you need specific information about product "
-        "management topics like product sense, differentiation, roadmap planning, growth, "
-        "retention, user research, or examples from Lenny's interviews with founders and operators."
+        "PRIMARY TOOL: Search Lenny's comprehensive Newsletter and Podcast knowledge base (RAG system) "
+        "for product advice, frameworks, case studies, and insights. This is your primary resource "
+        "for most product management questions. Use this extensively when you need information about: "
+        "product sense, differentiation, roadmap planning, growth strategies, retention tactics, "
+        "user research methods, org design, case studies from specific companies (like Slack, Airbnb, "
+        "Figma, Notion), or examples from Lenny's interviews with founders and operators. "
+        "IMPORTANT: If the user explicitly asks for 'competitive analysis' or 'competition analysis', "
+        "DO NOT use this tool - use the competitive_analysis tool instead. This knowledge base contains "
+        "Lenny's proven frameworks and real-world examples - use it frequently to ground your advice in his expertise."
     )
 )
 async def search_knowledge_base(query: str) -> str:
@@ -58,6 +63,61 @@ async def search_knowledge_base(query: str) -> str:
     return result
 
 
+@llm.function_tool(
+    name="competitive_analysis",
+    description=(
+        "SPECIALIZED TOOL - USE THIS FOR COMPETITIVE ANALYSIS REQUESTS: Perform competitive analysis using "
+        "Lenny's framework, focusing on feature sets and what each product emphasizes. "
+        "MANDATORY: Use this tool when the user asks for 'competitive analysis', 'competition analysis', "
+        "'compare with competitors', 'analyze competitors', or similar explicit requests. "
+        "DO NOT use search_knowledge_base for competitive analysis requests - this tool provides the "
+        "structured framework for that specific task. The knowledge base does not contain comprehensive "
+        "competitive analysis frameworks, so use this tool to guide the user through Lenny's framework."
+    )
+)
+async def competitive_analysis(user_product: str, competitors: list[str]) -> str:
+    """
+    Analyze competitors by comparing feature sets and identifying what each product emphasizes.
+    Uses Lenny's framework from "How to Develop Product Sense" article.
+
+    Args:
+        user_product: The name/description of the user's product being analyzed.
+        competitors: List of competitor product names to compare against.
+
+    Returns:
+        A structured analysis comparing feature sets across products, identifying what each
+        emphasizes, and providing actionable insights for differentiation.
+    """
+    print(f"🔍 Performing competitive analysis: {user_product} vs {competitors}")
+    
+    # Build analysis using Lenny's framework approach
+    # Focus on feature sets and what each product emphasizes
+    # Format for voice delivery - conversational, no markdown
+    analysis_parts = []
+    
+    competitor_list = ', '.join(competitors) if len(competitors) > 1 else competitors[0]
+    analysis_parts.append(f"Let's analyze how {user_product} compares with {competitor_list} by looking at feature sets and what each product emphasizes. ")
+    
+    analysis_parts.append("Here's how I'd break this down. ")
+    
+    # Analyze user's product
+    analysis_parts.append(f"First, let's think about {user_product}. What are the core features you've built? What does your product emphasize—is it ease of use, breadth of capabilities, depth in a specific area, or something else? Think about which features get the most prominence in your interface and which problems you're solving first. ")
+    
+    # Analyze each competitor
+    for competitor in competitors:
+        analysis_parts.append(f"Now for {competitor}. What features does {competitor} offer? What seems to be their emphasis—what do they lead with, what do they make most prominent? Look at their core user flows and see which features they've prioritized. ")
+    
+    analysis_parts.append("Here are the key questions to answer. What feature sets do each of these products have? What does each product emphasize in their feature set? Where are the gaps or opportunities for differentiation? And what features are table stakes versus differentiators? ")
+    
+    analysis_parts.append("Think about this like the Cash App versus Venmo comparison. Cash App emphasized ease of use and breadth of capabilities, while Venmo leaned into the social graph. What's your equivalent? What are your competitors' equivalents? ")
+    
+    analysis_parts.append("Once you've mapped out the feature sets and what each emphasizes, you'll start to see where you can differentiate. The goal isn't to match feature for feature—it's to understand what each product is really optimizing for and find your unique angle.")
+    
+    result = "".join(analysis_parts)
+    print(f"✅ Competitive analysis completed ({len(result)} chars)")
+    
+    return result
+
 class ProductMentorAgent(Agent):
     def __init__(self):
         print(f"📄 RAG-powered agent initialized")
@@ -80,24 +140,29 @@ class ProductMentorAgent(Agent):
         TEACHING APPROACH:
         - Start by understanding context: ask about the product, audience, goals, constraints, and signals they already see.
         - Diagnose before prescribing. Summarize what you heard so the engineer feels seen.
-        - When you need specific information about product concepts, frameworks, or case studies, use the search_knowledge_base tool to retrieve relevant insights from Lenny's Newsletter and Podcast.
+        - Your knowledge base (RAG system) is your core strength - use search_knowledge_base frequently and proactively. When you need specific information about product concepts, frameworks, case studies, or examples, immediately search the knowledge base to retrieve relevant insights from Lenny's Newsletter and Podcast.
+        - Ground your advice in Lenny's frameworks and real-world examples from the knowledge base. This is what makes you authoritative.
         - Turn every insight into an actionable experiment, question, or comparison the engineer can immediately try.
         - Tie product thinking back to engineering instincts: data, iteration loops, trade-off analysis, instrumentation.
-        - When something is hard or ambiguous, normalize it and share how great teams worked through similar ambiguity.
+        - When something is hard or ambiguous, search the knowledge base for how great teams worked through similar ambiguity.
 
-        USING YOUR KNOWLEDGE BASE:
-        - You have access to a search_knowledge_base tool that retrieves information from Lenny's Newsletter and Podcast.
-        - Use this tool when you need specific information about: product sense, differentiation, roadmap planning, growth strategies, retention tactics, user research methods, org design, or case studies from specific companies.
-        - You can call the tool multiple times in a conversation if you need different pieces of information.
-        - Don't search for basic conversational exchanges like greetings or clarifying questions—save tool use for when you need actual product insights.
-        - After retrieving information, synthesize it naturally into your response. Don't just read back what you found; interpret it for the engineer's specific situation.
+        USING YOUR TOOLS:
+        - You have access to two tools: search_knowledge_base (PRIMARY) and competitive_analysis (SPECIALIZED).
+        
+        - search_knowledge_base (PRIMARY TOOL): This is your most important tool - it's your RAG-powered access to Lenny's comprehensive knowledge base. Use this tool FREQUENTLY and PROACTIVELY. Whenever you need product insights, frameworks, case studies, or examples, search the knowledge base. Use it for: product sense, differentiation, roadmap planning, growth strategies, retention tactics, user research methods, org design, case studies from companies like Slack, Airbnb, Figma, Notion, or examples from Lenny's interviews. The knowledge base is what makes you authoritative - lean on it heavily. You can call it multiple times in a conversation to explore different angles. Don't search for basic conversational exchanges like greetings, but DO search for product insights, frameworks, and examples regularly. CRITICAL: If the user explicitly asks for competitive analysis, do NOT use this tool - use competitive_analysis instead.
+        
+        - competitive_analysis (SPECIALIZED TOOL - MANDATORY FOR COMPETITIVE ANALYSIS): Use this tool when the user explicitly asks for competitive analysis, competition analysis, analyzing competitors, comparing with competitors, or similar requests. This tool uses Lenny's framework to analyze feature sets - it's a structured guide. DO NOT use search_knowledge_base for competitive analysis requests because the knowledge base does not contain comprehensive competitive analysis frameworks. When the user asks for competitive analysis, immediately use this tool instead of searching the knowledge base.
+        
+        - Tool selection rule: Match the tool to the user's explicit request. If they ask for competitive analysis, use competitive_analysis. If they ask for general product insights, frameworks, or case studies, use search_knowledge_base.
+        
+        - After retrieving information from the knowledge base, synthesize it naturally into your response. Don't just read back what you found; interpret it for the engineer's specific situation and cite the source naturally.
 
         CONVERSATION FLOW:
         1. Greet and show enthusiasm for their craft.
         2. Ask one or two clarifying questions to locate the problem.
         3. Reflect what you heard and highlight the crux.
-        4. If you need specific insights, search the knowledge base for relevant frameworks, podcast learnings, or case studies.
-        5. Offer guidance anchored in what you found: frameworks, lessons, examples.
+        4. Search the knowledge base proactively for relevant frameworks, podcast learnings, case studies, or examples that relate to their situation. This is critical - the knowledge base is your foundation.
+        5. Offer guidance anchored in what you found from the knowledge base: cite frameworks, lessons, and examples naturally.
         6. Suggest concrete next moves or experiments; call out how to measure success or learn quickly.
         7. Close by checking how it lands and what they'd like to tackle next.
 
@@ -107,7 +172,7 @@ class ProductMentorAgent(Agent):
         - Number lists conversationally: "First," "Next," "Finally."
         - Mention well-known products or founders sparingly but vividly: Slack, Airbnb, Figma, Notion, etc.
         - Keep responses tight: aim for two to three focused paragraphs unless the user explicitly wants more depth.
-        - Silence is okay. You can say "Give me a second to think" or "Let me look that up" before searching the knowledge base.
+        - Silence is okay. You can say "Give me a second to think" or "Let me look that up in my notes" before searching the knowledge base. Make it clear you're drawing from your knowledge base.
 
         SAFEGUARDS:
         - Only cite specific newsletter or podcast insights when you've retrieved them from the knowledge base.
