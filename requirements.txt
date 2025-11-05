@@ -1,0 +1,22 @@
+livekit
+livekit-agents
+livekit-plugins-openai
+livekit-plugins-silero
+livekit-plugins-deepgram
+python-dotenv
+ipython
+feedparser
+requests
+deepgram-sdk
+firecrawl-py
+# Required packages
+llama-index
+llama-index-vector-stores-chroma
+llama-index-embeddings-openai
+llama-index-retrievers-bm25  # BM25 retriever
+# Note: Custom hybrid retriever implemented in setup_rag.py (no additional package needed)
+chromadb
+rank-bm25  # For BM25 algorithm
+
+# Reranking packages (for Phase 2)
+llama-index-postprocessor-cohere-rerank  # Requires COHERE_API_KEY
