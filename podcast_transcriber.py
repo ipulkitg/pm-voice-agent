@@ -199,7 +199,7 @@ if __name__ == "__main__":
     # Example usage:
     # Replace with actual RSS feed URL
     # You can find RSS feeds at: https://www.listennotes.com/ or podcast websites
-    
+    #https://rss.libsyn.com/shows/61840/destinations/240976.xml
     RSS_FEED_URL = "https://api.substack.com/feed/podcast/10845.rss"
     
     # For Spotify: You'll need to find the RSS feed first
