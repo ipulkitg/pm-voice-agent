@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Room } from 'livekit-client';
 import {
   type ReceivedChatMessage,
@@ -50,20 +50,20 @@ export function LiveTranscript({ className }: LiveTranscriptProps) {
   return (
     <div
       className={cn(
-        'fixed top-0 right-0 bottom-0 z-40 w-[380px] border-l border-border/50 bg-background/95 backdrop-blur-sm flex flex-col',
+        'border-border/50 bg-background/95 fixed top-0 right-0 bottom-0 z-40 flex w-[380px] flex-col border-l backdrop-blur-sm',
         className
       )}
     >
       {/* Header */}
-      <div className="border-b border-border/50 px-4 py-3">
-        <h3 className="text-sm font-semibold text-foreground">Transcript</h3>
+      <div className="border-border/50 border-b px-4 py-3">
+        <h3 className="text-foreground text-sm font-semibold">Transcript</h3>
       </div>
 
       {/* Transcript Content */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 px-4 py-4">
         {transcriptMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-muted-foreground">Transcript will appear here...</p>
+            <p className="text-muted-foreground text-sm">Transcript will appear here...</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -90,4 +90,3 @@ export function LiveTranscript({ className }: LiveTranscriptProps) {
     </div>
   );
 }
-
