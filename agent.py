@@ -14,16 +14,25 @@ load_dotenv()
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 
-# Initialize query engine once at module level (startup)
-print("🚀 Initializing RAG query engine...")
-query_engine = get_query_engine(
-    rebuild_index=False,  # Use existing index
-    similarity_top_k=15,  # Retrieve top 15 chunks
-    rerank_top_n=5,       # Rerank to top 5
-    use_reranking=True,   # Enable Cohere reranking
-    verbose=False         # Reduce logging during conversations
-)
-print("✅ RAG query engine ready")
+# Lazy initialization: query engine will be initialized on first use
+# This prevents initialization during Docker build when API keys aren't available
+query_engine = None
+
+
+def _get_query_engine():
+    """Lazy initialization of RAG query engine - only initializes when needed at runtime"""
+    global query_engine
+    if query_engine is None:
+        print("🚀 Initializing RAG query engine...")
+        query_engine = get_query_engine(
+            rebuild_index=False,  # Use existing index
+            similarity_top_k=15,  # Retrieve top 15 chunks
+            rerank_top_n=5,       # Rerank to top 5
+            use_reranking=True,   # Enable Cohere reranking
+            verbose=False         # Reduce logging during conversations
+        )
+        print("✅ RAG query engine ready")
+    return query_engine
 
 
 @llm.function_tool(
@@ -53,9 +62,12 @@ async def search_knowledge_base(query: str) -> str:
     """
     print(f"🔍 Searching knowledge base: {query}")
 
+    # Lazy initialize query engine if not already initialized
+    engine = _get_query_engine()
+
     # Run the synchronous query in a thread pool to avoid blocking
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(None, query_engine.query, query)
+    response = await loop.run_in_executor(None, engine.query, query)
 
     result = response.response or "No relevant information found."
     print(f"✅ Knowledge base search completed ({len(result)} chars)")
