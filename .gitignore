@@ -67,3 +67,6 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# Frontend - exclude mermaid diagram overlay
+frontend/components/app/mermaid-diagram-overlay.tsx
+
