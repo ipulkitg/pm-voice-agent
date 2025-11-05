@@ -1,6 +1,6 @@
 """
 Phase 1 & 2: RAG Pipeline Setup
-- Phase 1: Loads context data, chunks it semantically, indexes with Chroma,
+- Phase 1: Loads context data, chunks it semantically, indexes with Pinecone,
   and sets up hybrid retrieval (Vector + BM25)
 - Phase 2: Creates hybrid retriever, adds reranking, and sets up query engine
 """
@@ -19,7 +19,7 @@ from llama_index.core.node_parser import SemanticSplitterNodeParser, SentenceSpl
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import ResponseMode
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.vector_stores.pinecone import PineconeVectorStore
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle
@@ -30,16 +30,16 @@ try:
 except ImportError:
     CohereRerank = None  # Optional – script will continue without reranking
 
-# Chroma imports
-import chromadb
+# Pinecone imports
+from pinecone import Pinecone, ServerlessSpec
 
 # Load environment variables
 load_dotenv()
 
 CONTEXT_FILE = Path("context") / "all_content.md"
-CHROMA_DB_PATH = Path("./chroma_db")
-CHROMA_COLLECTION = "sales_agent_kb"
+PINECONE_INDEX_NAME = "sales-agent-kb"
 DEFAULT_EMBED_MODEL = "text-embedding-3-small"
+DEFAULT_EMBED_DIM = 1536  # OpenAI text-embedding-3-small dimension
 DEFAULT_RERANK_MODEL = "rerank-english-v3.0"
 SEMANTIC_BUFFER_SIZE = 1
 SEMANTIC_BREAKPOINT_PERCENTILE = 95
@@ -86,14 +86,33 @@ def _chunk_documents(documents, embed_model):
     return semantic_splitter.get_nodes_from_documents(documents)
 
 
-def _get_or_create_chroma_collection():
-    """Set up the persistent Chroma collection used by LlamaIndex."""
-    CHROMA_DB_PATH.mkdir(exist_ok=True)
-    chroma_client = chromadb.PersistentClient(path=str(CHROMA_DB_PATH))
-    return chroma_client.get_or_create_collection(
-        name=CHROMA_COLLECTION,
-        metadata={"hnsw:space": "cosine"},
-    )
+def _get_or_create_pinecone_index():
+    """Set up the Pinecone index used by LlamaIndex."""
+    pinecone_api_key = os.getenv("PINECONE_API_KEY")
+    if not pinecone_api_key:
+        raise ValueError("PINECONE_API_KEY not found in environment variables")
+    
+    pc = Pinecone(api_key=pinecone_api_key)
+    
+    # Check if index exists, create if it doesn't
+    existing_indexes = [idx.name for idx in pc.list_indexes()]
+    if PINECONE_INDEX_NAME not in existing_indexes:
+        print(f"📦 Creating Pinecone index: {PINECONE_INDEX_NAME}")
+        # Use serverless spec (free tier compatible)
+        pc.create_index(
+            name=PINECONE_INDEX_NAME,
+            dimension=DEFAULT_EMBED_DIM,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        print(f"✅ Index created: {PINECONE_INDEX_NAME}")
+    else:
+        print(f"♻️  Using existing Pinecone index: {PINECONE_INDEX_NAME}")
+    
+    return pc.Index(PINECONE_INDEX_NAME)
 
 
 def _create_bm25_retriever(nodes, similarity_top_k=10):
@@ -130,12 +149,16 @@ class RagArtifacts:
 
 
 def _prepare_index_and_nodes(embed_model, rebuild_index: bool = False):
-    """Load documents, chunk them, and either build or load the Chroma-backed index."""
-    chroma_collection = _get_or_create_chroma_collection()
-    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+    """Load documents, chunk them, and either build or load the Pinecone-backed index."""
+    pinecone_index = _get_or_create_pinecone_index()
+    vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-    should_rebuild = rebuild_index or chroma_collection.count() == 0
+    # Check if index is empty (Pinecone doesn't have a simple count method)
+    # We'll use rebuild_index flag or check index stats
+    index_stats = pinecone_index.describe_index_stats()
+    index_count = index_stats.get('total_vector_count', 0)
+    should_rebuild = rebuild_index or index_count == 0
     
     if should_rebuild:
         # Only chunk and embed when rebuilding
@@ -149,16 +172,17 @@ def _prepare_index_and_nodes(embed_model, rebuild_index: bool = False):
         avg_chunk = sum(chunk_sizes) // len(chunk_sizes)
         print(f"✅ Created {len(nodes)} semantic chunks | avg={avg_chunk} chars, min={min(chunk_sizes)}, max={max(chunk_sizes)}")
 
-        print("🔁 Building vector index inside Chroma (embedding chunks)...")
+        print("🔁 Building vector index inside Pinecone (embedding chunks)...")
         index = VectorStoreIndex(
             nodes=nodes,
             storage_context=storage_context,
             embed_model=embed_model,
             show_progress=True,
         )
+        print(f"✅ Uploaded {len(nodes)} vectors to Pinecone")
     else:
         # Reuse existing index - no need to re-chunk semantically
-        print("♻️  Reusing existing Chroma embeddings...")
+        print(f"♻️  Reusing existing Pinecone index ({index_count} vectors)...")
         index = VectorStoreIndex.from_vector_store(
             vector_store=vector_store,
             embed_model=embed_model,
@@ -173,7 +197,7 @@ def _prepare_index_and_nodes(embed_model, rebuild_index: bool = False):
         nodes = simple_splitter.get_nodes_from_documents(documents)
         print(f"✅ Created {len(nodes)} nodes for BM25 retriever (simple chunking)")
 
-    print(f"💾 Chroma location: {CHROMA_DB_PATH} | collection: {CHROMA_COLLECTION}")
+    print(f"💾 Pinecone index: {PINECONE_INDEX_NAME}")
     return index, nodes
 
 
@@ -278,7 +302,7 @@ def setup_rag(
     """
     Set up the full RAG stack:
     - semantic chunking over context/all_content.md
-    - persistent Chroma vector index
+    - persistent Pinecone vector index
     - single hybrid retriever (dense + BM25 via RRF)
     - optional Cohere reranking
     """
@@ -342,11 +366,11 @@ def _demo_queries(query_engine: RetrieverQueryEngine):
 
 
 def _main():
-    parser = argparse.ArgumentParser(description="Hybrid RAG setup using LlamaIndex + Chroma + Cohere reranking.")
+    parser = argparse.ArgumentParser(description="Hybrid RAG setup using LlamaIndex + Pinecone + Cohere reranking.")
     parser.add_argument(
         "--rebuild-index",
         action="store_true",
-        help="Force re-embedding context/all_content.md into Chroma.",
+        help="Force re-embedding context/all_content.md into Pinecone.",
     )
     parser.add_argument(
         "--no-rerank",
